@@ -12,3 +12,5 @@ src/*.html
 src/edoc-info
 src/erlang.png
 src/stylesheet.css
+.project
+.settings
