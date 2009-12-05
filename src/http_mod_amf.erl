@@ -168,7 +168,13 @@ error_msg(FaultCode, FaultDetail, FaultString) ->
       {faultDetail, FaultDetail},
       {faultString, FaultString}]}.
 
-acknowledge_msg({object, _Class, Members}, Body) ->
+acknowledge_msg({object, Class, Members}, {amf_response, Headers, Body}) ->
+    acknowledge_msg({object, Class, Members}, Headers, Body);
+
+acknowledge_msg({object, Class, Members}, Body) ->
+    acknowledge_msg({object, Class, Members}, [], Body).
+  
+acknowledge_msg({object, _Class, Members}, Headers, Body) ->
     MessageId = proplists:get_value(messageId, Members),
     ClientId =
 	case proplists:get_value(clientId, Members, null) of
@@ -186,7 +192,7 @@ acknowledge_msg({object, _Class, Members}, Body) ->
       {body, Body},
       {timeToLive, 0},
       {timestamp, now_to_milli_seconds(now())},
-      {headers, []}]}.
+      {headers, Headers}]}.
 
 random_uuid() ->
     <<X1:32, X2:16, X3:16, X4:16, X5:48>> = crypto:rand_bytes(16),
