@@ -90,6 +90,9 @@ handle_amf_message(#amf_message{response = Response, body = Body}) ->
 -define(ERROR_MESSAGE,       <<"flex.messaging.messages.ErrorMessage">>).
 -define(ASYNC_MESSAGE,       <<"flex.messaging.messages.AsyncMessage">>).
 
+handle_amf_message_body({avmplus, Msg}) ->
+    handle_amf_message_body(Msg);
+
 handle_amf_message_body([{object, ?COMMAND_MESSAGE, Members} = Msg]) ->
     case proplists:get_value(operation, Members) of
 	?CLIENT_PING ->
@@ -132,7 +135,8 @@ handle_amf_message_body([{object, ?REMOTING_MESSAGE, Members} = Msg]) ->
 	    throw(resource_unavailable)
     end;
 handle_amf_message_body([{object, ?ASYNC_MESSAGE, Members} = Msg]) ->
-    Destination = binary_to_atom(proplists:get_value(destination, Members), utf8),
+    Destination =
+        binary_to_atom(proplists:get_value(destination, Members), utf8),
     Headers = proplists:get_value(headers, Members),
     Body = proplists:get_value(body, Members),
     {ok, FlexDestinations} = application:get_env(flex_destinations),
