@@ -1,41 +1,51 @@
-%%%-------------------------------------------------------------------
-%%% @author Ruslan Babayev <ruslan@babayev.com>
-%%% @copyright 2009, Ruslan Babayev
-%%% @doc This module handles Flex remoting requests.
-%%% Uses `flex_services' and `flex_auth' environment variables.
-%%% @end
-%%%-------------------------------------------------------------------
+%% @author Ruslan Babayev <ruslan@babayev.com>
+%% @copyright 2009 Ruslan Babayev
+%% @doc This module handles Flex remoting requests.
+
 -module(http_mod_amf).
 -author('ruslan@babayev.com').
+
 -export([init/0, handle/4, auth/2]).
 
 -include("http.hrl").
--include_lib("amf/include/amf.hrl").
+-include("amf.hrl").
 
+%% @doc Initializes the module.
+%% @spec init() -> ok | {error, Reason}
 init() ->
     case application:start(amf) of
-	ok ->
-	    ok;
-	{error, {already_started, amf}} ->
-	    ok;
-	_Else ->
-	    {error, amf_not_found}
+    ok ->
+        ok;
+    {error, {already_started, amf}} ->
+        ok;
+    _Else ->
+        {error, amf_not_found}
     end.
 
+%% @doc Handles the Request, Response and Flags from previous modules.
+%%      Uses `flex_services', `flex_auth' and `flex_destinations'
+%%      environment variables.
+%% @spec handle(Socket, Request, Response, Flags) -> Result
+%%       Request = #http_request{}
+%%       Response = #http_response{} | undefined
+%%       Flags = list()
+%%       Result = #http_response{} | already_sent | {error, Reason} | Proceed
+%%       Proceed = {proceed, Request, Response, Flags}
 handle(_Socket, #http_request{method = 'POST'} = Request, Response, Flags) ->
     case proplists:get_value('Content-Type', Request#http_request.headers) of
-	"application/x-amf" ->
-	    AMFRequest = amf:decode_packet(Request#http_request.body),
-	    AMFResponse = handle_amf_packet(AMFRequest),
-	    Body = amf:encode_packet(AMFResponse),
-	    Headers = [{'Content-Type', "application/x-amf"},
-		       {'Content-Length', size(Body)}],
-	    {proceed, #http_response{headers = Headers, body = Body}, Flags};
-	_ ->
-	    {proceed, Response, Flags}
+    "application/x-amf" ->
+        AMFRequest = amf:decode_packet(Request#http_request.body),
+        AMFResponse = handle_amf_packet(AMFRequest),
+        Body = amf:encode_packet(AMFResponse),
+        Headers = [{'Content-Type', "application/x-amf"},
+               {'Content-Length', size(Body)}],
+        Response1 = #http_response{headers = Headers, body = Body},
+        {proceed, Request, Response1, Flags};
+    _ ->
+        {proceed, Request, Response, Flags}
     end;
-handle(_Socket, _Request, Response, Flags) ->
-    {proceed, Response, Flags}.
+handle(_Socket, Request, Response, Flags) ->
+    {proceed, Request, Response, Flags}.
 
 auth(Username, Password) ->
     error_logger:info_report({?MODULE, auth, Username, Password}),
@@ -58,16 +68,16 @@ handle_amf_messages([Message | Rest], Acc) ->
 
 handle_amf_message(#amf_message{response = Response, body = Body}) ->
     try handle_amf_message_body(Body) of
-	ResponseBody ->
-	    #amf_message{target = list_to_binary([Response, "/onResult"]),
-			 response = <<>>,
-			 body = ResponseBody}
+    ResponseBody ->
+        #amf_message{target = list_to_binary([Response, "/onResult"]),
+             response = <<>>,
+             body = ResponseBody}
     catch
-	Error ->
-	    error_logger:error_report({?MODULE, Error}),
-	    #amf_message{target = list_to_binary([Response, "/onStatus"]),
-			 response = <<>>,
-			 body = error_msg(Error)}
+    Error ->
+        error_logger:error_report({?MODULE, Error}),
+        #amf_message{target = list_to_binary([Response, "/onStatus"]),
+             response = <<>>,
+             body = error_msg(Error)}
     end.
 
 -define(SUBSCRIBE,                0).
@@ -91,37 +101,30 @@ handle_amf_message(#amf_message{response = Response, body = Body}) ->
 -define(ASYNC_MESSAGE,       <<"flex.messaging.messages.AsyncMessage">>).
 
 handle_amf_message_body([{avmplus, Msg}]) ->
-    handle_amf_message_body(Msg);
-
-handle_amf_message_body({avmplus, Msg}) ->
-    handle_amf_message_body(Msg);
-
-handle_amf_message_body(Msg) when not is_list(Msg) ->
     handle_amf_message_body([Msg]);
-
 handle_amf_message_body([{object, ?COMMAND_MESSAGE, Members} = Msg]) ->
     case proplists:get_value(operation, Members) of
-	?CLIENT_PING ->
-	    acknowledge_msg(Msg, null);
-	?DISCONNECT ->
-	    acknowledge_msg(Msg, null);
-	?LOGIN ->
-	    Body = proplists:get_value(body, Members),
-	    Decoded =  base64:decode_to_string(Body),
-	    [Username, Password] = re:split(Decoded, ":", [{parts, 2}]),
-	    {ok, FlexAuth} = application:get_env(flex_auth),
-	    case FlexAuth(Username, Password) of
-		true ->
-		    acknowledge_msg(Msg, Username);
-		false ->
-		    throw(invalid_credentials)
-	    end;
-	?LOGOUT ->
-	    acknowledge_msg(Msg, true);
-	?TRIGGER_CONNECT ->
-	    acknowledge_msg(Msg, null);
-	_Other ->
-	    throw(unsupported_operation)
+    ?CLIENT_PING ->
+        acknowledge_msg(Msg, null);
+    ?DISCONNECT ->
+        acknowledge_msg(Msg, null);
+    ?LOGIN ->
+        Body = proplists:get_value(body, Members),
+        Decoded =  base64:decode_to_string(Body),
+        [Username, Password] = re:split(Decoded, ":", [{parts, 2}]),
+        {ok, FlexAuth} = application:get_env(flex_auth),
+        case FlexAuth(Username, Password) of
+        true ->
+            acknowledge_msg(Msg, Username);
+        false ->
+            throw(invalid_credentials)
+        end;
+    ?LOGOUT ->
+        acknowledge_msg(Msg, true);
+    ?TRIGGER_CONNECT ->
+        acknowledge_msg(Msg, null);
+    _Other ->
+        throw(unsupported_operation)
     end;
 handle_amf_message_body([{object, ?REMOTING_MESSAGE, Members} = Msg]) ->
     Operation = binary_to_atom(proplists:get_value(operation, Members), utf8),
@@ -129,16 +132,16 @@ handle_amf_message_body([{object, ?REMOTING_MESSAGE, Members} = Msg]) ->
     Body = proplists:get_value(body, Members),
     {ok, FlexServices} = application:get_env(flex_services),
     case lists:member(Source, FlexServices) of
-	true ->
-	    try apply(Source, Operation, Body) of
-		Result ->
-		    acknowledge_msg(Msg, Result)
-	    catch
-		Class:Term ->
-		    throw({service_failure, Class, Term})
-	    end;
-	false ->
-	    throw(resource_unavailable)
+    true ->
+        try apply(Source, Operation, Body) of
+        Result ->
+            acknowledge_msg(Msg, Result)
+        catch
+        Class:Term ->
+            throw({service_failure, Class, Term})
+        end;
+    false ->
+        throw(resource_unavailable)
     end;
 handle_amf_message_body([{object, ?ASYNC_MESSAGE, Members} = Msg]) ->
     Destination =
@@ -180,19 +183,18 @@ error_msg(FaultCode, FaultDetail, FaultString) ->
 
 acknowledge_msg({object, Class, Members}, {amf_response, Headers, Body}) ->
     acknowledge_msg({object, Class, Members}, Headers, Body);
-
 acknowledge_msg({object, Class, Members}, Body) ->
     acknowledge_msg({object, Class, Members}, [], Body).
-  
+
 acknowledge_msg({object, _Class, Members}, Headers, Body) ->
     MessageId = proplists:get_value(messageId, Members),
     ClientId =
-	case proplists:get_value(clientId, Members, null) of
-	    null ->
-		random_uuid();
-	    Else ->
-		Else
-	end,
+    case proplists:get_value(clientId, Members, null) of
+        null ->
+        random_uuid();
+        Else ->
+        Else
+    end,
     Destination = proplists:get_value(destination, Members, null),
     {object, ?ACKNOWLEDGE_MESSAGE,
      [{messageId, random_uuid()},

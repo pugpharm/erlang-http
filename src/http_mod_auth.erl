@@ -1,12 +1,10 @@
-%%%-------------------------------------------------------------------
-%%% @author Ruslan Babayev <ruslan@babayev.com>
-%%% @copyright 2009, Ruslan Babayev
-%%% @doc This module provides basic user authentication using text files.
-%%% Uses `path' flag and `directories' environment variable.
-%%% @end
-%%%-------------------------------------------------------------------
+%% @author Ruslan Babayev <ruslan@babayev.com>
+%% @copyright 2009 Ruslan Babayev
+%% @doc This module provides basic user authentication using text files.
+
 -module(http_mod_auth).
 -author('ruslan@babayev.com').
+
 -export([init/0, handle/4]).
 
 -include("http.hrl").
@@ -14,9 +12,19 @@
 -record(http_user, {name, password}).
 -record(http_group, {name, users}).
 
+%% @doc Initializes the module.
+%% @spec init() -> ok | {error, Reason}
 init() ->
     ok.
 
+%% @doc Handles the Request, Response and Flags from previous modules.
+%%      Uses `path' flag and `directories' environment variable.
+%% @spec handle(Socket, Request, Response, Flags) -> Result
+%%       Request = #http_request{}
+%%       Response = #http_response{} | undefined
+%%       Flags = list()
+%%       Result = #http_response{} | already_sent | {error, Reason} | Proceed
+%%       Proceed = {proceed, Request, Response, Flags}
 handle(Socket, Request, Response, Flags) ->
     Path = proplists:get_value(path, Flags),
     {ok, Directories} = application:get_env(directories),
@@ -37,7 +45,7 @@ handle(Socket, Request, Response, Flags) ->
 		    http_lib:response(403)
 	    end;
 	nomatch ->
-	    {proceed, Response, Flags}
+	    {proceed, Request, Response, Flags}
     end.
 
 path_match(Path, Directories) ->
@@ -77,9 +85,9 @@ matches(Address, [Pattern | Rest]) ->
     end.
 
 matches2(Tuple, Pattern) when size(Tuple) == size(Pattern) ->
-    Match = fun({X, X}) -> true;
-	       ({_, '_'}) -> true;
-	       ({_, _}) -> false
+    Match = fun({X,X}) -> true;
+	       ({_,'_'}) -> true;
+	       ({_,_}) -> false
 	    end,
     Zipped = lists:zip(tuple_to_list(Tuple), tuple_to_list(Pattern)),
     lists:all(Match, Zipped);
@@ -91,7 +99,7 @@ auth(Request, Response, DirOpts, Flags) ->
     ValidGroups = proplists:get_value(require_group, DirOpts, []),
     case ValidGroups of
 	undefined when ValidUsers == undefined ->
-	    {proceed, Response, Flags};
+	    {proceed, Request, Response, Flags};
 	_ ->
 	    Headers = Request#http_request.headers,
 	    case proplists:get_value('Authorization', Headers) of
@@ -100,7 +108,7 @@ auth(Request, Response, DirOpts, Flags) ->
 		"Basic " ++ Encoded ->
 		    try base64:decode_to_string(Encoded) of
 			Decoded ->
-			    validate_user(Response, Flags, DirOpts,
+			    validate_user(Request, Response, Flags, DirOpts,
 					  ValidUsers, ValidGroups, Decoded)
 		    catch
 			exit:_ -> http_lib:response(401)
@@ -126,14 +134,15 @@ www_authenticate_response(Realm) ->
 	       {'WWW-Authenticate', "Basic realm=\"" ++ Realm ++ "\""}],
     #http_response{status = 401, headers = Headers, body = Body}.
 
-validate_user(Response, Flags, DirOpts, ValidUsers, ValidGroups, Decoded) ->
+validate_user(Request, Response, Flags, DirOpts,
+	      ValidUsers, ValidGroups, Decoded) ->
     try re:split(Decoded, ":", [{parts, 2}, {return, list}]) of
 	[UserName, Password] ->
  	    case lists:member(UserName, ValidUsers) of
  		true ->
  		    case is_valid_user(UserName, Password, DirOpts) of
  			true ->
- 			    {proceed, Response, Flags};
+ 			    {proceed, Request, Response, Flags};
  			false ->
  			    authorization_required(DirOpts)
  		    end;
@@ -142,7 +151,7 @@ validate_user(Response, Flags, DirOpts, ValidUsers, ValidGroups, Decoded) ->
  			true ->
  			    case is_valid_user(UserName, Password, DirOpts) of
 				true ->
-				    {proceed, Response, Flags};
+				    {proceed, Request, Response, Flags};
 				false ->
 				    authorization_required(DirOpts)
 			    end;

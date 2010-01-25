@@ -1,12 +1,10 @@
-%%%-------------------------------------------------------------------
-%%% @author Ruslan Babayev <ruslan@babayev.com>
-%%% @copyright 2009, Ruslan Babayev
-%%% @doc This module handles `GET' requests that include `Range' header.
-%%% Uses `file_info' flag.
-%%% @end
-%%%-------------------------------------------------------------------
+%% @author Ruslan Babayev <ruslan@babayev.com>
+%% @copyright 2009 Ruslan Babayev
+%% @doc This module handles `GET' requests containing `Range' header.
+
 -module(http_mod_range).
 -author('ruslan@babayev.com').
+
 -export([init/0, handle/4]).
 
 -include("http.hrl").
@@ -15,9 +13,19 @@
 -define(BOUNDARY, "THIS_STRING_SEPARATES").
 -define(READ_SIZE, 8*1024).
 
+%% @doc Initializes the module.
+%% @spec init() -> ok | {error, Reason}
 init() ->
     ok.
 
+%% @doc Handles the Request, Response and Flags from previous modules.
+%%      Uses `file_info' flag.
+%% @spec handle(Socket, Request, Response, Flags) -> Result
+%%       Request = #http_request{}
+%%       Response = #http_response{} | undefined
+%%       Flags = list()
+%%       Result = #http_response{} | already_sent | {error, Reason} | Proceed
+%%       Proceed = {proceed, Request, Response, Flags}
 handle(Socket, #http_request{method = 'GET'} = Request, undefined, Flags) ->
     Headers = Request#http_request.headers,
     Path = proplists:get_value(path, Flags),
@@ -31,16 +39,16 @@ handle(Socket, #http_request{method = 'GET'} = Request, undefined, Flags) ->
 		{ok, Ranges} ->
 		    send(Socket, Path, FileInfo, Ranges);
 		{error, _Reason} ->
-		    {proceed, undefined, Flags}
+		    {proceed, Request, undefined, Flags}
 	    end;
 	false ->
-	    {proceed, undefined, Flags}
+	    {proceed, Request, undefined, Flags}
     end;
-handle(_Socket, _Request, undefined, Flags) ->
-    {proceed, undefined, Flags};
-handle(_Socket, _Request, Response, Flags)
+handle(_Socket, Request, undefined, Flags) ->
+    {proceed, Request, undefined, Flags};
+handle(_Socket, Request, Response, Flags)
   when is_record(Response, http_response) ->
-    {proceed, accept_ranges(Response), Flags}.
+    {proceed, Request, accept_ranges(Response), Flags}.
 
 accept_ranges(Response) when is_record(Response, http_response) ->
     Headers = [{'Accept-Ranges', "bytes"} | Response#http_response.headers],

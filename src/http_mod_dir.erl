@@ -1,39 +1,48 @@
-%%%-------------------------------------------------------------------
-%%% @author Ruslan Babayev <ruslan@babayev.com>
-%%% @copyright 2009, Ruslan Babayev
-%%% @doc This module implements directory listing.
-%%% Uses `path' and `file_info' flags.
-%%% @end
-%%%-------------------------------------------------------------------
+%% @author Ruslan Babayev <ruslan@babayev.com>
+%% @copyright 2009 Ruslan Babayev
+%% @doc This module implements directory listing.
+
 -module(http_mod_dir).
 -author('ruslan@babayev.com').
+
 -export([init/0, handle/4]).
 
 -include("http.hrl").
 -include_lib("kernel/include/file.hrl").
 
+%% @doc Initializes the module.
+%% @spec init() -> ok | {error, Reason}
 init() ->
     ok.
 
-handle(_Socket, #http_request{method = 'GET', uri = URI}, undefined, Flags) ->
+%% @doc Handles the Request, Response and Flags from previous modules.
+%%      Uses `path' and `file_info' flags.
+%% @spec handle(Socket, Request, Response, Flags) -> Result
+%%       Request = #http_request{}
+%%       Response = #http_response{} | undefined
+%%       Flags = list()
+%%       Result = #http_response{} | already_sent | {error, Reason} | Proceed
+%%       Proceed = {proceed, Request, Response, Flags}
+handle(_Socket, #http_request{method = 'GET'} = Request, undefined, Flags) ->
     Path = proplists:get_value(path, Flags),
     case proplists:get_value(file_info, Flags) of
 	FileInfo when FileInfo#file_info.type == directory ->
+	    URI = Request#http_request.uri,
 	    ReqPath = http_lib:url_decode(http_lib:uri_to_path(URI)),
 	    case list_dir(Path, ReqPath) of
 		{ok, Dir} ->
 		    Headers = [{'Content-Type', "text/html"},
 			       {'Content-Length', iolist_size(Dir)}],
 		    Response = #http_response{headers = Headers, body = Dir},
-		    {proceed, Response, Flags};
+		    {proceed, Request, Response, Flags};
 		{error, _Reason} ->
 		    http_lib:response(404)
 	    end;
 	_ ->
-	    {proceed, undefined, Flags}
+	    {proceed, Request, undefined, Flags}
     end;
-handle(_Socket, _Request, Response, Flags) ->
-    {proceed, Response, Flags}.
+handle(_Socket, Request, Response, Flags) ->
+    {proceed, Request, Response, Flags}.
 
 list_dir(AbsPath, ReqPath) ->
     case file:list_dir(AbsPath) of

@@ -1,20 +1,28 @@
-%%%-------------------------------------------------------------------
-%%% @author Ruslan Babayev <ruslan@babayev.com>
-%%% @copyright 2009, Ruslan Babayev
-%%% @doc This module implementes Erlang Server Interface (ESI).
-%%% Uses `scripts' environment variable.
-%%% @end
-%%%-------------------------------------------------------------------
+%% @author Ruslan Babayev <ruslan@babayev.com>
+%% @copyright 2009 Ruslan Babayev
+%% @doc This module implementes Erlang Server Interface (ESI).
+
 -module(http_mod_esi).
 -author('ruslan@babayev.com').
+
 -export([init/0, handle/4]).
 
 -include("http.hrl").
 
+%% @doc Initializes the module.
+%% @spec init() -> ok | {error, Reason}
 init() ->
     ok.
 
-handle(Socket, Request, Response, Flags) ->
+%% @doc Handles the Request, Response and Flags from previous modules.
+%%      Uses `scripts' environment variable.
+%% @spec handle(Socket, Request, Response, Flags) -> Result
+%%       Request = #http_request{}
+%%       Response = #http_response{} | undefined
+%%       Flags = list()
+%%       Result = #http_response{} | already_sent | {error, Reason} | Proceed
+%%       Proceed = {proceed, Request, Response, Flags}
+handle(Socket, Request, undefined, Flags) ->
     Path = http_lib:uri_to_path(Request#http_request.uri),
     {ok, Scripts} = application:get_env(scripts),
     case match(Request, Path, Scripts) of
@@ -24,10 +32,12 @@ handle(Socket, Request, Response, Flags) ->
 		exit:Reason -> {error, Reason}
 	    end;
 	nomatch ->
-	    {proceed, Response, Flags};
+	    {proceed, Request, undefined, Flags};
 	{error, Reason} ->
 	    {error, Reason}
-    end.
+    end;
+handle(_Socket, Request, Response, Flags) ->
+    {proceed, Request, Response, Flags}.
 
 match(_Request, _Path, []) ->
     nomatch;

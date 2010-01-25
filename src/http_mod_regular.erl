@@ -1,18 +1,17 @@
-%%%-------------------------------------------------------------------
-%%% @author Ruslan Babayev <ruslan@babayev.com>
-%%% @copyright 2009, Ruslan Babayev
-%%% @doc This module handles `GET' requests to regular files.
-%%% Uses `path' and `file_info' flags as well as `mime_types'
-%%% environment variable.
-%%% @end
-%%%-------------------------------------------------------------------
+%% @author Ruslan Babayev <ruslan@babayev.com>
+%% @copyright 2009 Ruslan Babayev
+%% @doc This module handles `GET' requests for regular files.
+
 -module(http_mod_regular).
 -author('ruslan@babayev.com').
+
 -export([init/0, handle/4]).
 
 -include("http.hrl").
 -include_lib("kernel/include/file.hrl").
 
+%% @doc Initializes the module.
+%% @spec init() -> ok | {error, Reason}
 init() ->
     {ok, MimeTypesConf} = application:get_env(mime_types),
     {ok, MimeTypes} = file:consult(http_lib:dir(MimeTypesConf)),
@@ -20,7 +19,16 @@ init() ->
     ets:insert(http_mime_types, MimeTypes),
     ok.
 
-handle(Socket, #http_request{method = 'GET'}, undefined, Flags) ->
+%% @doc Handles the Request, Response and Flags from previous modules.
+%%      Uses `path' and `file_info' flags and `mime_types'
+%%      environment variable.
+%% @spec handle(Socket, Request, Response, Flags) -> Result
+%%       Request = #http_request{}
+%%       Response = #http_response{} | undefined
+%%       Flags = list()
+%%       Result = #http_response{} | already_sent | {error, Reason} | Proceed
+%%       Proceed = {proceed, Request, Response, Flags}
+handle(Socket, #http_request{method = 'GET'} = Request, undefined, Flags) ->
     case proplists:get_value(file_info, Flags) of
 	FI when FI#file_info.type == regular ->
 	    Path = proplists:get_value(path, Flags),
@@ -47,10 +55,10 @@ handle(Socket, #http_request{method = 'GET'}, undefined, Flags) ->
 		    http_lib:response(404)
 	    end;
 	_ ->
-	    {proceed, undefined, Flags}
+	    {proceed, Request, undefined, Flags}
     end;
-handle(_Socket, _Request, Response, Flags) ->
-    {proceed, Response, Flags}.
+handle(_Socket, Request, Response, Flags) ->
+    {proceed, Request, Response, Flags}.
 
 send_in_blocks(Socket, IoDevice, BlockSize) ->
     case file:read(IoDevice, BlockSize) of

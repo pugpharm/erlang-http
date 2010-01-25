@@ -1,16 +1,13 @@
-%%%-------------------------------------------------------------------
-%%% @author Ruslan Babayev <ruslan@babayev.com>
-%%% @copyright 2009, Ruslan Babayev
-%%% @doc HTTP Socket Server.
-%%% @end
-%%% Created : 26 Jul 2009 by Ruslan Babayev <ruslan@babayev.com>
-%%%-------------------------------------------------------------------
+%% @author Ruslan Babayev <ruslan@babayev.com>
+%% @copyright 2009 Ruslan Babayev
+%% @doc HTTP Socket Server.
+
 -module(http_socket_server).
 -author('ruslan@babayev.com').
 
 -behaviour(gen_server).
 
-%% API
+%% external API
 -export([start_link/2]).
 
 %% gen_server callbacks
@@ -24,33 +21,18 @@
 
 -record(state, {transport, listen, acceptor, loop}).
 
-%%%===================================================================
-%%% API
-%%%===================================================================
-
-%%--------------------------------------------------------------------
 %% @doc Starts the server registered as Name with socket handler Loop.
-%% @spec start_link(atom(), function()) -> {ok, Pid} | ignore | {error, Error}
-%% @end
-%%--------------------------------------------------------------------
+%% @spec start_link(atom(), function()) -> {ok, Pid} | ignore | {error, Reason}
 start_link(Name, Loop) ->
-    gen_server:start_link({local, Name}, ?MODULE, Loop, []).
+    gen_server:start_link({local, Name}, ?MODULE, [Loop], []).
 
-%%%===================================================================
-%%% gen_server callbacks
-%%%===================================================================
-
-%%--------------------------------------------------------------------
 %% @private
 %% @doc Initializes the server.
-%%
 %% @spec init(Args) -> {ok, State} |
 %%                     {ok, State, Timeout} |
 %%                     ignore |
 %%                     {stop, Reason}
-%% @end
-%%--------------------------------------------------------------------
-init(Loop) ->
+init([Loop]) ->
     process_flag(trap_exit, true),
     {ok, Address} = application:get_env(ip),
     {ok, Port} = application:get_env(port),
@@ -80,44 +62,30 @@ init(Loop) ->
 	    {stop, Reason}
     end.
 
-%%--------------------------------------------------------------------
 %% @private
 %% @doc Handles call messages.
-%%
-%% @spec handle_call(Request, From, State) ->
-%%                                   {reply, Reply, State} |
-%%                                   {reply, Reply, State, Timeout} |
-%%                                   {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, Reply, State} |
-%%                                   {stop, Reason, State}
-%% @end
-%%--------------------------------------------------------------------
+%% @spec handle_call(Request, From, State) -> {reply, Reply, State} |
+%%                                            {reply, Reply, State, Timeout} |
+%%                                            {noreply, State} |
+%%                                            {noreply, State, Timeout} |
+%%                                            {stop, Reason, Reply, State} |
+%%                                            {stop, Reason, State}
 handle_call(_Request, _From, State) ->
-    Reply = ok,
-    {reply, Reply, State}.
+    {noreply, State}.
 
-%%--------------------------------------------------------------------
 %% @private
 %% @doc Handles cast messages.
-%%
 %% @spec handle_cast(Msg, State) -> {noreply, State} |
 %%                                  {noreply, State, Timeout} |
 %%                                  {stop, Reason, State}
-%% @end
-%%--------------------------------------------------------------------
 handle_cast({accepted, _Pid}, State) ->
     {noreply, new_acceptor(State)}.
 
-%%--------------------------------------------------------------------
 %% @private
 %% @doc Handles all non call/cast messages.
-%%
 %% @spec handle_info(Info, State) -> {noreply, State} |
 %%                                   {noreply, State, Timeout} |
 %%                                   {stop, Reason, State}
-%% @end
-%%--------------------------------------------------------------------
 handle_info({'EXIT', _Pid, normal}, State) ->
     {noreply, State};
 handle_info({'EXIT', _Pid, closed}, State) ->
@@ -133,49 +101,28 @@ handle_info({'EXIT', _Pid, Reason}, State) ->
 handle_info(_Info, State) ->
     {noreply, State}.
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% This function is called by a gen_server when it is about to
-%% terminate. It should be the opposite of Module:init/1 and do any
-%% necessary cleaning up. When it returns, the gen_server terminates
-%% with Reason. The return value is ignored.
-%%
-%% @spec terminate(Reason, State) -> void()
-%% @end
-%%--------------------------------------------------------------------
+%% @doc Performs cleanup on termination.
+%% @spec terminate(Reason, State) -> any()
 terminate(_Reason, #state{listen = Socket}) ->
     http_lib:close(Socket).
 
-%%--------------------------------------------------------------------
 %% @private
 %% @doc Converts process state when code is changed.
-%%
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
-%% @end
-%%--------------------------------------------------------------------
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
 %% @private
 %% @doc Spawns a new acceptor.
 %% @spec new_acceptor(#state{}) -> #state{}
-%% @end
-%%--------------------------------------------------------------------
 new_acceptor(#state{listen = Listen, loop = Loop} = State) ->
     Pid = proc_lib:spawn_link(?MODULE, acceptor, [self(), Listen, Loop]),
     State#state{acceptor = Pid}.
 
-%%--------------------------------------------------------------------
 %% @private
 %% @doc Main acceptor loop.
-%% @end
-%%--------------------------------------------------------------------
+%% @spec acceptor(pid(), Listen, function()) -> any()
 acceptor(Server, Listen, Loop) ->
     case http_lib:accept(Listen) of
 	{ok, Socket} ->

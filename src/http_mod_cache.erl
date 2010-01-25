@@ -1,23 +1,31 @@
-%%%-------------------------------------------------------------------
-%%% @author Ruslan Babayev <ruslan@babayev.com>
-%%% @copyright 2009, Ruslan Babayev
-%%% @doc This module implements ETS based cache.
-%%% Uses `path' and `file_info' flags as well as `max_size_cached_file',
-%%% `max_cache_size' and `max_cache_memory' environment variables.
-%%% @end
-%%%-------------------------------------------------------------------
+%% @author Ruslan Babayev <ruslan@babayev.com>
+%% @copyright 2009 Ruslan Babayev
+%% @doc This module implements ETS based cache.
+
 -module(http_mod_cache).
 -author('ruslan@babayev.com').
+
 -export([init/0, handle/4]).
 
 -include("http.hrl").
 -include_lib("kernel/include/file.hrl").
 
+%% @doc Initializes the module.
+%% @spec init() -> ok | {error, Reason}
 init() ->
     ets:new(http_cache, [set, public, named_table]),
     ok.
 
-handle(_Socket, #http_request{method = 'GET'}, undefined, Flags) ->
+%% @doc Handles the Request, Response and Flags from previous modules.
+%%      Uses `path' and `file_info' flags as well as `max_size_cached_file',
+%%      `max_cache_size' and `max_cache_memory' environment variables.
+%% @spec handle(Socket, Request, Response, Flags) -> Result
+%%       Request = #http_request{}
+%%       Response = #http_response{} | undefined
+%%       Flags = list()
+%%       Result = #http_response{} | already_sent | {error, Reason} | Proceed
+%%       Proceed = {proceed, Request, Response, Flags}
+handle(_Socket, #http_request{method = 'GET'} = Request, undefined, Flags) ->
     {ok, MaxSize} = application:get_env(max_size_cached_file),
     case proplists:get_value(file_info, Flags) of
 	FI when FI#file_info.type == regular, FI#file_info.size < MaxSize ->
@@ -27,24 +35,25 @@ handle(_Socket, #http_request{method = 'GET'}, undefined, Flags) ->
 		    %% a fresh cache entry found
 		    H = headers(FI, Path),
 		    Response = #http_response{headers = H, body = Bin},
-		    {proceed, Response, Flags};
+		    {proceed, Request, Response, Flags};
 		_ ->
 		    %% cache entry is either missing or stale
 		    case file:read_file(Path) of
 			{ok, Bin} ->
-			    insert(http_cache, {Path, FI#file_info.mtime, Bin}),
+			    Entry = {Path, FI#file_info.mtime, Bin},
+			    insert(http_cache, Entry),
 			    H = headers(FI, Path),
 			    Response = #http_response{headers = H, body = Bin},
-			    {proceed, Response, Flags};
+			    {proceed, Request, Response, Flags};
 			{error, _Reason} ->
 			    http_lib:response(404)
 		    end
 	    end;
 	_ ->
-	    {proceed, undefined, Flags}
+	    {proceed, Request, undefined, Flags}
     end;
-handle(_Socket, _Request, Response, Flags) ->
-    {proceed, Response, Flags}.
+handle(_Socket, Request, Response, Flags) ->
+    {proceed, Request, Response, Flags}.
 
 headers(#file_info{mtime = Time, size = Size} = FileInfo, Path) ->
     Headers1 =
