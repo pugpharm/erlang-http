@@ -1,16 +1,19 @@
 ERL=erl
 ERLC=erlc
 APP=http
+REBAR=./rebar
 
 all: compile
 
-compile:
-	@$(ERL) -make
+get-deps:
+	@$(REBAR) get-deps
+
+compile: get-deps
+	@$(REBAR) compile
 
 clean:
 	@echo "removing:"
-	@rm -fv ebin/*.beam
-	@rm -fv deps/*/ebin/*.beam
+	@$(REBAR) clean
 
 docs:
 	@$(ERL) -noshell -run edoc_run application '$(APP)' '"."' '[]'
@@ -23,5 +26,5 @@ run: compile
 	@$(ERL) -pa ebin deps/*/ebin -s $(APP)
 
 test: compile
-	@$(ERL) -pa ebin -eval "eunit:test({application,$(APP)})" \
-	-noshell -s init stop
+	@$(REBAR) eunit
+
