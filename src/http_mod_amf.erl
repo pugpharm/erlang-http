@@ -8,7 +8,7 @@
 -export([init/0, handle/4, auth/2]).
 
 -include("http.hrl").
--include("amf.hrl").
+-include_lib("amf/include/amf.hrl").
 
 %% @doc Initializes the module.
 %% @spec init() -> ok | {error, Reason}
