@@ -1,3 +1,5 @@
+Rebarized version of git://github.com/mujaheed/erlang-http.git.
+
 This is an Erlang/OTP application that includes HTTP/1.1 client and server.
 
 It is similar to inets and supports pluggable modules, but exposes a slightly
@@ -10,9 +12,14 @@ Getting started:
 
 git clone git://github.com/mujaheed/erlang-http.git
 cd erlang-http
-git submodule init
-git submodule update
-make
+make compile
+
+If you don't have rebar installed get it here:
+https://github.com/basho/rebar.git
+
+
+Try it:
+
 make run
 
 open http://localhost:8080
