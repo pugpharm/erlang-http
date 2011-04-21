@@ -2,7 +2,7 @@
 %% @copyright 2009 Ruslan Babayev
 %% @doc HTTP Starter.
 
--module(http).
+-module(erlang_http).
 -author('ruslan@babayev.com').
 
 -export([start/0, stop/0]).

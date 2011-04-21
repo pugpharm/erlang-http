@@ -1,8 +1,8 @@
 %% -*-Erlang-*-
-{application, http,
+{application, erlang_http,
  [{description, "HTTP Application"},
   {vsn, "1.0.0"},
-  {modules, [http,
+  {modules, [erlang_http,
              http_app,
 	     http_sup,
 	     http_lib,
